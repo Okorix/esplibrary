@@ -186,3 +186,5 @@ Players.PlayerRemoving:Connect(function(Player)
     RemoveESP(Player)
 end)
 RunService.RenderStepped:Connect(UpdateESP)
+
+return ESPSettings
