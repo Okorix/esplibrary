@@ -17,6 +17,7 @@ getgenv().ESPSettings = {
     NameVisible = false,
     NameColor = Color3.new(255, 255, 255),
     NameSize = 12,
+    HealthBarOutlineVisible = false,
     HealthBarVisible = false,
     HealthTextVisible = false,
     CurrentToolTextVisible = false,
@@ -26,8 +27,8 @@ local Cached = {}
 
 local function CreateDrawing(Class, Properties)
     local Drawing = Drawing.new(Class)
-    for Properties, Value in pairs(Properties) do
-        Drawing[Properties] = Value
+    for Property, Value in pairs(Properties) do
+        Drawing[Property] = Value
     end
     return Drawing
 end
@@ -40,6 +41,7 @@ local function CreateESP(Player)
             Thickness = 3,
             Transparency = 1,
             Filled = false,
+            ZIndex = 1, -- Setting a higher ZIndex for BoxOutline
         }),
         Box = CreateDrawing("Square", {
             Visible = false,
@@ -47,35 +49,42 @@ local function CreateESP(Player)
             Thickness = 1,
             Transparency = 1,
             Filled = false,
+            ZIndex = 2, -- Lower ZIndex for Box
         }),
         NameText = CreateDrawing("Text", {
             Visible = false,
             Color = ESPSettings.NameColor,
             Size = ESPSettings.NameSize,
             Outline = true,
+            ZIndex = 2, -- Set ZIndex for NameText to match BoxOutline
         }),
         HealthBarOutline = CreateDrawing("Line", {
             Thickness = 3,
             Color = Color3.new(0, 0, 0),
+            ZIndex = 1, -- Set ZIndex for HealthBarOutline to match BoxOutline
         }),
         HealthBar = CreateDrawing("Line", {
             Thickness = 1,
+            ZIndex = 2, -- Set ZIndex for HealthBar to match Box
         }),
         HealthText = CreateDrawing("Text", {
             Color = Color3.new(255, 255, 255),
             Outline = true,
             Center = false,
             Size = 11,
+            ZIndex = 1, -- Set ZIndex for HealthText to match BoxOutline
         }),
         CurrentToolText = CreateDrawing("Text", {
             Color = Color3.new(255, 255, 255),
             Outline = true,
             Center = false,
             Size = ESPSettings.NameSize - 1,
+            ZIndex = 1, -- Set ZIndex for CurrentToolText to match BoxOutline
         }),
     }
     Cached[Player] = ESP
 end
+
 local function RemoveESP(Player)
     if not Cached[Player] then
         return
@@ -83,7 +92,7 @@ local function RemoveESP(Player)
 
     for _, DrawingObject in pairs(Cached[Player]) do
         if DrawingObject then
-            local No, Yes = pcall(function()
+            pcall(function()
                 DrawingObject:Remove()
             end)
         end
@@ -91,7 +100,7 @@ local function RemoveESP(Player)
 end
 
 local function UpdateESP()
-    for Player,ESP in pairs(Cached) do
+    for Player, ESP in pairs(Cached) do
         local Box = ESP.Box
         local BoxOutline = ESP.BoxOutline
         local NameText = ESP.NameText
@@ -105,7 +114,7 @@ local function UpdateESP()
 
         local Character = Player.Character
 
-        if Character ~= nil and Character:FindFirstChild("Humanoid") ~= nil and Character:FindFirstChild("HumanoidRootPart") ~= nil and Player ~= LocalPlayer and Character.Humanoid.Health > 0 and ESPSettings.Enabled == true then
+        if Character and Character:FindFirstChild("Humanoid") and Character:FindFirstChild("HumanoidRootPart") and Player ~= LocalPlayer and Character.Humanoid.Health > 0 and ESPSettings.Enabled then
             local Vector, OnScreen = Camera:WorldToViewportPoint(Character.HumanoidRootPart.Position)
 
             local RootPart = Character.HumanoidRootPart
@@ -115,11 +124,16 @@ local function UpdateESP()
             local LegPosition = WorldToViewportPoint(CurrentCamera, RootPart.Position - LegOffset)
 
             if OnScreen then
-                Box.Size = Vector2.new(2500 / RootPosition.Z, HeadPosition.Y - LegPosition.Y)
+                local FOVFactor = Camera.FieldOfView / 70 -- Normalize based on default FOV
+
+                local BoxHeight = HeadPosition.Y - LegPosition.Y
+                local BoxWidth = 2500 / RootPosition.Z / FOVFactor
+
+                Box.Size = Vector2.new(BoxWidth, BoxHeight)
                 Box.Position = Vector2.new(RootPosition.X - Box.Size.X / 2, RootPosition.Y - Box.Size.Y / 2)
                 Box.Visible = ESPSettings.BoxVisible
 
-                BoxOutline.Size = Vector2.new(2500 / RootPosition.Z, HeadPosition.Y - LegPosition.Y)
+                BoxOutline.Size = Vector2.new(BoxWidth, BoxHeight)
                 BoxOutline.Position = Vector2.new(RootPosition.X - BoxOutline.Size.X / 2, RootPosition.Y - BoxOutline.Size.Y / 2)
                 BoxOutline.Visible = ESPSettings.BoxOutlineVisible
 
@@ -133,7 +147,7 @@ local function UpdateESP()
                 HealthBarOutline.From = Vector2.new(Box.Position.X - 6, Box.Position.Y + Box.Size.Y)
                 HealthBarOutline.To = Vector2.new(HealthBarOutline.From.X, HealthBarOutline.From.Y - Box.Size.Y)
                 HealthBar.From = Vector2.new((Box.Position.X - 5), Box.Position.Y + Box.Size.Y)
-                HealthBar.To = Vector2.new(HealthBar.From.X, HealthBar.From.Y - (Character.Humanoid.Health / Character.Humanoid.MaxHealth) * Box.Size.Y)
+                HealthBar.To = Vector2.new(HealthBar.From.X, HealthBar.From.Y - HealthPercentage * Box.Size.Y)
                 HealthBar.Color = Color3.new(1, 0, 0):Lerp(Color3.new(0, 1, 0), HealthPercentage)
 
                 local RoundedNumber = math.floor(Character.Humanoid.Health * 100) / 100
@@ -143,7 +157,7 @@ local function UpdateESP()
 
                 HealthText.Visible = ESPSettings.HealthTextVisible
                 HealthBar.Visible = ESPSettings.HealthBarVisible
-                HealthBarOutline.Visible = ESPSettings.HealthBarVisible
+                HealthBarOutline.Visible = ESPSettings.HealthBarOutlineVisible
 
                 CurrentToolText.Size = ESPSettings.NameSize - 1
                 CurrentToolText.Position = Vector2.new(RootPosition.X - CurrentToolText.TextBounds.X / 2, RootPosition.Y - Box.Size.Y / 1.25)
@@ -179,12 +193,15 @@ end
 for _, Player in pairs(Players:GetChildren()) do
     CreateESP(Player)
 end
+
 Players.PlayerAdded:Connect(function(Player)
     CreateESP(Player)
 end)
+
 Players.PlayerRemoving:Connect(function(Player)
     RemoveESP(Player)
 end)
+
 RunService.RenderStepped:Connect(UpdateESP)
 
 return ESPSettings
